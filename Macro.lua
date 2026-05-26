@@ -200,12 +200,4 @@ drag(crouchBtn,crouchLock,"crouch")
 	updateAllTransparency()
 end
 
-createMacroUI()
-
-if emoteGui then
-    emoteGui.Enabled = false
-end
-
-if crouchGui then
-    crouchGui.Enabled = false
-end
+_G.CreateMacroUI=createMacroUI
