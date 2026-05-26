@@ -201,3 +201,6 @@ local crouchLock = holdSystem(crouchBtn,function()
 end,"crouch")
 
 drag(crouchBtn,crouchLock,"crouch")
+
+	updateAllTransparency()
+end
