@@ -197,7 +197,61 @@ end,"crouch")
 
 drag(crouchBtn,crouchLock,"crouch")
 
-	updateAllTransparency()
+function updateAllTransparency()
+
+    local PlayerGui=
+        game.Players.LocalPlayer
+        :WaitForChild(
+            "PlayerGui"
+        )
+
+    local emoteGui=
+        PlayerGui:
+        FindFirstChild(
+            "EmoteGui"
+        )
+
+    local crouchGui=
+        PlayerGui:
+        FindFirstChild(
+            "CrouchGui"
+        )
+
+    for _,gui in pairs({
+        emoteGui,
+        crouchGui
+    }) do
+
+        if gui then
+
+            for _,v in pairs(
+                gui:GetDescendants()
+            ) do
+
+                if v:IsA(
+                    "TextLabel"
+                ) then
+
+                    v.TextTransparency=
+                    textTransparency
+
+                end
+
+                if v:IsA(
+                    "ImageLabel"
+                )
+                or v:IsA(
+                    "ImageButton"
+                ) then
+
+                    v.ImageTransparency=
+                    iconTransparency
+
+                end
+
+            end
+        end
+    end
 end
 
 _G.CreateMacroUI=createMacroUI
