@@ -46,11 +46,6 @@ local function holdSystem(button,callback,name)
                 locked = not locked
                 _G.GuiLock[name] = locked
 
-                Fluent:Notify({
-                    Title = "UI Lock",
-                    Content = locked and "Locked" or "Unlocked",
-                    Duration = 2
-                })
             end
         end
     end)
