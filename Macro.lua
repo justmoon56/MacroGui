@@ -15,23 +15,61 @@ local UserInputService = game:GetService("UserInputService")
 
 local function MakeDraggable(topbarobject, object, locked)
     local Dragging = false
-    local DragStart = nil
-    local StartPosition = nil
+    local DragStart
+    local StartPosition
     local ActiveInput = nil
 
     local PressStartTime = 0
     local HoldTime = 5.0
-    local HasToggledThisPress = false
-    local MoveThreshold = 10 -- Tombol baru mau bergerak jika digeser lebih dari 10 pixel
+    local HasLockedThisPress = false
+
+    -- Menyimpan koneksi drag secara dinamis agar bisa diputus total (Disconnect)
+    local DragConnection = nil
 
     object:SetAttribute("Locked", locked or false)
 
-    -- Fungsi mengecek area tombol
     local function IsInBounds(inputPosition)
         local absPos = topbarobject.AbsolutePosition
         local absSize = topbarobject.AbsoluteSize
         return inputPosition.X >= absPos.X and inputPosition.X <= (absPos.X + absSize.X)
            and inputPosition.Y >= absPos.Y and inputPosition.Y <= (absPos.Y + absSize.Y)
+    end
+
+    local function Update(input)
+        local delta = input.Position - DragStart
+        object.Position = UDim2.new(
+            StartPosition.X.Scale,
+            StartPosition.X.Offset + delta.X,
+            StartPosition.Y.Scale,
+            StartPosition.Y.Offset + delta.Y
+        )
+    end
+
+    -- Fungsi untuk menghubungkan deteksi pergerakan (Connect Drag)
+    local function ConnectDragListener()
+        if DragConnection then DragConnection:Disconnect() end -- Bersihkan jika ada koneksi lama
+        
+        DragConnection = UserInputService.InputChanged:Connect(function(input)
+            if input == ActiveInput and Dragging then
+                -- Jika digeser lebih dari 15 pixel, batalkan niat hold-to-lock (user murni ingin drag)
+                if PressStartTime > 0 and (input.Position - DragStart).Magnitude > 15 then
+                    PressStartTime = 0
+                end
+                
+                Update(input)
+                
+                if object.Name == "EmoteBtn" then _G.GuiPosition["emote"] = object.Position end
+                if object.Name == "CrouchBtn" then _G.GuiPosition["crouch"] = object.Position end
+            end
+        end)
+    end
+
+    -- Fungsi untuk memutuskan deteksi pergerakan total (Disconnect Drag)
+    local function DisconnectDragListener()
+        if DragConnection then
+            DragConnection:Disconnect()
+            DragConnection = nil
+        end
     end
 
     local function ToggleLock()
@@ -41,19 +79,35 @@ local function MakeDraggable(topbarobject, object, locked)
         if object.Name == "EmoteBtn" then _G.GuiLock["emote"] = newState end
         if object.Name == "CrouchBtn" then _G.GuiLock["crouch"] = newState end
 
-        -- Notifikasi Fluent UI sesuai permintaanmu
+        if newState then
+            -- JIKA LOCK: Putus fungsi drag total agar tidak bisa digeser sama sekali
+            DisconnectDragListener()
+            Dragging = false
+            ActiveInput = nil
+        else
+            -- JIKA UNLOCK: Pasang kembali fungsi drag agar bisa digeser lagi
+            if Dragging and ActiveInput then
+                ConnectDragListener()
+            end
+        end
+
+        -- Kirim notifikasi Fluent
         if Fluent then
             Fluent:Notify({
                 Title = newState and "Button Locked" or "Button Unlocked",
-                Content = newState and "Ditahan 5 detik: Tombol Berhasil Dikunci!" or "Ditahan 5 detik: Tombol Sekarang Bisa Digeser!",
-                Duration = 3
+                Content = newState and "Fungsi drag dimatikan total. Tombol terkunci." or "Fungsi drag diaktifkan kembali. Tombol bisa digeser.",
+                Duration = 2
             })
         else
-            print(object.Name .. " Status Lock: " .. tostring(newState))
+            print(object.Name .. " Locked State: " .. tostring(newState))
         end
     end
 
-    -- Input Dimulai
+    -- Inisialisasi awal saat script dijalankan pertama kali
+    if not object:GetAttribute("Locked") then
+        -- Jika dari awal tidak terkunci, biarkan siap menerima drag nanti
+    end
+
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
             return
@@ -63,25 +117,26 @@ local function MakeDraggable(topbarobject, object, locked)
             ActiveInput = input
             DragStart = input.Position
             StartPosition = object.Position
-            Dragging = false -- Belum di-drag sampai melewati threshold
             
             PressStartTime = tick()
-            HasToggledThisPress = false
+            HasLockedThisPress = false
 
-            -- Thread khusus menghitung durasi tahanan 5 detik
+            -- Jika tombol saat ini TIDAK terkunci, aktifkan fungsi drag-nya
+            if not object:GetAttribute("Locked") then
+                Dragging = true
+                ConnectDragListener()
+            else
+                Dragging = false
+            end
+
+            -- Loop timer 5 detik untuk mendeteksi hold lock/unlock
             task.spawn(function()
-                while ActiveInput == input and PressStartTime > 0 do
-                    task.wait(0.1)
-                    if PressStartTime > 0 and (tick() - PressStartTime) >= HoldTime and not HasToggledThisPress then
-                        HasToggledThisPress = true
-                        
-                        -- Jalankan fungsi Lock / Unlock
-                        ToggleLock()
-                        
-                        -- Lepas paksa fungsi drag/seret saat itu juga
-                        Dragging = false
-                        ActiveInput = nil
+                while PressStartTime > 0 do
+                    task.wait(0.05)
+                    if PressStartTime > 0 and (tick() - PressStartTime) >= HoldTime and not HasLockedThisPress then
+                        HasLockedThisPress = true
                         PressStartTime = 0
+                        ToggleLock() -- Jalankan fungsi lock/unlock + disconnect drag
                         break
                     end
                 end
@@ -89,44 +144,12 @@ local function MakeDraggable(topbarobject, object, locked)
         end
     end)
 
-    -- Pergerakan Input
-    UserInputService.InputChanged:Connect(function(input)
-        if input == ActiveInput and DragStart and StartPosition then
-            -- Jika tombol sudah dikunci, jangan biarkan bergerak sama sekali
-            if object:GetAttribute("Locked") then 
-                Dragging = false
-                return 
-            end
-
-            local delta = input.Position - DragStart
-            
-            -- Jika pergerakan melampaui batas threshold, aktifkan mode drag dan matikan timer lock
-            if delta.Magnitude > MoveThreshold then
-                Dragging = true
-                PressStartTime = 0 -- Batalkan lock karena user berniat menggeser
-            end
-
-            if Dragging then
-                object.Position = UDim2.new(
-                    StartPosition.X.Scale,
-                    StartPosition.X.Offset + delta.X,
-                    StartPosition.Y.Scale,
-                    StartPosition.Y.Offset + delta.Y
-                )
-                if object.Name == "EmoteBtn" then _G.GuiPosition["emote"] = object.Position end
-                if object.Name == "CrouchBtn" then _G.GuiPosition["crouch"] = object.Position end
-            end
-        end
-    end)
-
-    -- Input Selesai
     UserInputService.InputEnded:Connect(function(input)
         if input == ActiveInput then
             Dragging = false
             PressStartTime = 0
             ActiveInput = nil
-            DragStart = nil
-            StartPosition = nil
+            DisconnectDragListener() -- Putus koneksi drag demi menghemat memori saat jari dilepas
         end
     end)
 end
@@ -174,7 +197,7 @@ local function SetupMacroClick(button, callback)
                 local dragDistance = (input.Position - dragStartPos).Magnitude
                 local holdDuration = tick() - startTime
 
-                -- Macro klik normal hanya aktif jika ditekan kurang dari 4 detik
+                -- Hanya eksekusi macro jika ditekan biasa (di bawah 4 detik)
                 if holdDuration < 4.0 and dragDistance < 15 then
                     callback()
                 end
@@ -229,7 +252,7 @@ local function createMacroUI()
         last = tick()
         task.spawn(function()
             pcall(function()
-                game.Workspace.Game.Players[player.Name].Equip:InvokeServer(2)
+                game.Workspace.Game.Workspace.Game.Players[player.Name].Equip:InvokeServer(2)
             end)
         end)
         task.spawn(function()
