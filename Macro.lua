@@ -97,7 +97,7 @@ local function MakeDraggable(topbarobject, object, locked)
         if object.Name == "CrouchBtn" then _G.GuiLock["crouch"] = currentLock end
 
         -- Perbarui Gambar Gembok (Locked / Unlocked)
-        lockToggle.Image = currentLock and "rbxassetid://10723434711" or "rbxassetid://10747366027"
+        lockToggle.Image = currentLock and "rbxassetid://108197727138078" or "rbxassetid://72137584392157"
 
         if currentLock then
             DisconnectDragListener()
@@ -208,7 +208,7 @@ local function SetupMacroClick(button, callback)
                 local holdDuration = tick() - startTime
 
                 -- Macro klik biasa hanya berjalan jika ditekan kurang dari 0.6 detik (tidak bentrok dengan menu gembok)
-                if holdDuration < 1 and dragDistance < 15 then
+                if holdDuration < 5 and dragDistance < 15 then
                     callback()
                 end
             end
