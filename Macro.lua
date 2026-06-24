@@ -52,6 +52,11 @@ local function MakeDraggable(topbarobject, object, locked)
     local hideAt = 0
 
     local function IsInBounds(inputPosition)
+        -- Validasi: Jika tombol tidak terlihat atau sizenya 0 (State OFF), abaikan input
+        if not topbarobject or not topbarobject.Parent or topbarobject.AbsoluteSize.X <= 0 then 
+            return false 
+        end
+        
         local absPos = topbarobject.AbsolutePosition
         local absSize = topbarobject.AbsoluteSize
         return inputPosition.X >= absPos.X and inputPosition.X <= (absPos.X + absSize.X)
@@ -187,6 +192,11 @@ local function SetupMacroClick(button, callback)
     local clickInput = nil
 
     UserInputService.InputBegan:Connect(function(input)
+        -- Validasi: Jika tombol sudah dihapus/disembunyikan (State OFF), abaikan seluruh klik macro
+        if not button or not button.Parent or button.AbsoluteSize.X <= 0 then 
+            return 
+        end
+
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             local absPos = button.AbsolutePosition
             local absSize = button.AbsoluteSize
@@ -207,8 +217,8 @@ local function SetupMacroClick(button, callback)
                 local dragDistance = (input.Position - dragStartPos).Magnitude
                 local holdDuration = tick() - startTime
 
-                -- Macro klik biasa hanya berjalan jika ditekan kurang dari 0.6 detik (tidak bentrok dengan menu gembok)
-                if holdDuration < 5 and dragDistance < 15 then
+                -- DIKEMBALIKAN KE 0.6 DETIK agar klop dengan sistem lock gembok baru dan tidak bocor saat hold
+                if holdDuration < 0.6 and dragDistance < 15 then
                     callback()
                 end
             end
