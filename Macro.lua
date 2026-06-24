@@ -17,6 +17,7 @@ local function MakeDraggable(topbarobject, object, locked)
     local Dragging = false
     local DragStart
     local StartPosition
+    local ActiveInput = nil -- Mengunci referensi jari/mouse yang valid
 
     local PressStartTime = 0
     local HoldTime = 5.0
@@ -24,7 +25,7 @@ local function MakeDraggable(topbarobject, object, locked)
 
     object:SetAttribute("Locked", locked or false)
 
-    -- Fungsi untuk mengecek apakah posisi klik/sentuhan berada di dalam area tombol
+    -- Fungsi untuk mengecek area sentuhan tombol
     local function IsInBounds(inputPosition)
         local absPos = topbarobject.AbsolutePosition
         local absSize = topbarobject.AbsoluteSize
@@ -61,14 +62,14 @@ local function MakeDraggable(topbarobject, object, locked)
         end
     end
 
-    -- Gunakan UserInputService global untuk mendeteksi awal sentuhan/klik
+    -- Deteksi sentuhan awal khusus pada area tombol
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
             return
         end
 
-        -- Cek apakah klik/sentuhan mengenai tombol ini
-        if IsInBounds(input.Position) then
+        if IsInBounds(input.Position) and not ActiveInput then
+            ActiveInput = input -- Ikat jari/mouse ini agar tidak terganggu jari lain
             Dragging = not object:GetAttribute("Locked")
             DragStart = input.Position
             StartPosition = object.Position
@@ -76,15 +77,16 @@ local function MakeDraggable(topbarobject, object, locked)
             PressStartTime = tick()
             HasLockedThisPress = false
 
-            -- Jalankan deteksi timer 5 detik secara independen
+            -- Timer Hold 5 detik
             task.spawn(function()
                 while PressStartTime > 0 do
-                    task.wait(0.1)
+                    task.wait(0.05) -- Dipercepat dari 0.1 agar pengecekan lebih presisi
                     if PressStartTime > 0 and (tick() - PressStartTime) >= HoldTime and not HasLockedThisPress then
                         HasLockedThisPress = true
                         ToggleLock()
                         Dragging = false
-                        PressStartTime = 0 -- Reset setelah berhasil lock
+                        PressStartTime = 0
+                        ActiveInput = nil
                         break
                     end
                 end
@@ -92,26 +94,27 @@ local function MakeDraggable(topbarobject, object, locked)
         end
     end)
 
-    -- Memperbarui posisi saat digerakkan
+    -- Pergerakan seret (Drag) yang aman dari gangguan jari lain
     UserInputService.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            if Dragging and PressStartTime > 0 then
-                -- Jika digerakkan terlalu jauh (artinya user ingin nge-drag, bukan nge-lock), batalkan timer lock
-                if (input.Position - DragStart).Magnitude > 15 then
-                    PressStartTime = 0
-                end
-                Update(input)
-                if object.Name == "EmoteBtn" then _G.GuiPosition["emote"] = object.Position end
-                if object.Name == "CrouchBtn" then _G.GuiPosition["crouch"] = object.Position end
+        if input == ActiveInput and Dragging then
+            -- Batalkan status hold untuk lock jika digeser lebih dari 15 pixel
+            if PressStartTime > 0 and (input.Position - DragStart).Magnitude > 15 then
+                PressStartTime = 0
             end
+            
+            Update(input)
+            
+            if object.Name == "EmoteBtn" then _G.GuiPosition["emote"] = object.Position end
+            if object.Name == "CrouchBtn" then _G.GuiPosition["crouch"] = object.Position end
         end
     end)
 
-    -- Reset total saat klik/sentuhan dilepas
+    -- Lepas ikatan input saat jari diangkat
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if input == ActiveInput then
             Dragging = false
             PressStartTime = 0
+            ActiveInput = nil
         end
     end)
 end
@@ -125,7 +128,7 @@ local function updateAllTransparency()
             local txt = emoteBtn:FindFirstChild("TextLabel")
             if txt then txt.TextTransparency = textTransparency end
         end
-        if crouchBtn then
+        if crouchGui then
             crouchBtn.ImageTransparency = iconTransparency
             local ico = crouchBtn:FindFirstChild("ImageLabel")
             if ico then ico.ImageTransparency = iconTransparency end
@@ -136,32 +139,36 @@ end
 local function SetupMacroClick(button, callback)
     local dragStartPos = nil
     local startTime = 0
+    local clickInput = nil
 
     UserInputService.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            -- Cek area tombol sebelum mencatat klik macro
             local absPos = button.AbsolutePosition
             local absSize = button.AbsoluteSize
             if input.Position.X >= absPos.X and input.Position.X <= (absPos.X + absSize.X)
             and input.Position.Y >= absPos.Y and input.Position.Y <= (absPos.Y + absSize.Y) then
-                dragStartPos = input.Position
-                startTime = tick()
+                if not clickInput then
+                    clickInput = input
+                    dragStartPos = input.Position
+                    startTime = tick()
+                end
             end
         end
     end)
 
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if input == clickInput then
             if dragStartPos then
                 local dragDistance = (input.Position - dragStartPos).Magnitude
                 local holdDuration = tick() - startTime
 
-                -- Macro hanya berjalan jika ditekan kurang dari 4 detik (menghindari bentrok dengan hold lock 5 detik)
+                -- Menghindari bentrok dengan hold-lock 5 detik
                 if holdDuration < 4.0 and dragDistance < 15 then
                     callback()
                 end
-                dragStartPos = nil
             end
+            dragStartPos = nil
+            clickInput = nil
         end
     end)
 end
