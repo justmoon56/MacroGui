@@ -52,10 +52,16 @@ local function MakeDraggable(topbarobject, object, locked)
     local hideAt = 0
 
     local function IsInBounds(inputPosition)
-        -- Validasi: Jika tombol tidak terlihat atau sizenya 0 (State OFF), abaikan input
-        if not topbarobject or not topbarobject.Parent or topbarobject.AbsoluteSize.X <= 0 then 
+        -- PERBAIKAN: Jika tombol tidak valid, tidak punya parent, atau tidak berada di bawah PlayerGui (State OFF), blokir drag
+        if not topbarobject or not topbarobject.Parent or not topbarobject:IsDescendantOf(game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")) then 
             return false 
         end
+        if not topbarobject.Visible or topbarobject.AbsoluteSize.X <= 0 then 
+            return false 
+        end
+        
+        local screenGui = topbarobject:FindFirstAncestorOfClass("ScreenGui")
+        if screenGui and not screenGui.Enabled then return false end
         
         local absPos = topbarobject.AbsolutePosition
         local absSize = topbarobject.AbsoluteSize
@@ -192,10 +198,16 @@ local function SetupMacroClick(button, callback)
     local clickInput = nil
 
     UserInputService.InputBegan:Connect(function(input)
-        -- Validasi: Jika tombol sudah dihapus/disembunyikan (State OFF), abaikan seluruh klik macro
-        if not button or not button.Parent or button.AbsoluteSize.X <= 0 then 
+        -- PERBAIKAN UTAMA: Jika tombol dihapus atau tidak berada di bawah PlayerGui (State OFF), abaikan input sepenuhnya!
+        if not button or not button.Parent or not button:IsDescendantOf(game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")) then 
             return 
         end
+        if not button.Visible or button.AbsoluteSize.X <= 0 then 
+            return 
+        end
+        
+        local screenGui = button:FindFirstAncestorOfClass("ScreenGui")
+        if screenGui and not screenGui.Enabled then return end
 
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             local absPos = button.AbsolutePosition
@@ -217,7 +229,7 @@ local function SetupMacroClick(button, callback)
                 local dragDistance = (input.Position - dragStartPos).Magnitude
                 local holdDuration = tick() - startTime
 
-                -- DIKEMBALIKAN KE 0.6 DETIK agar klop dengan sistem lock gembok baru dan tidak bocor saat hold
+                -- Jeda klik biasa di bawah 0.6 detik agar klop dengan deteksi gembok menu baru
                 if holdDuration < 0.6 and dragDistance < 15 then
                     callback()
                 end
