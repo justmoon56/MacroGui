@@ -29,7 +29,7 @@ local function MakeDraggable(topbarobject, object, locked)
     lockToggle.Size = UDim2.new(0, 28, 0, 28)
     lockToggle.Position = UDim2.new(1, 6, 0.5, -14) -- Posisinya di kanan persis
     lockToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    lockToggle.Image = object:GetAttribute("Locked") and "rbxassetid://10723434711" or "rbxassetid://10747366027"
+    lockToggle.Image = object:GetAttribute("Locked") and "rbxassetid://108197727138078" or "rbxassetid://72137584392157"
     lockToggle.ScaleType = Enum.ScaleType.Fit
     lockToggle.Visible = false -- Awalnya disembunyikan
     lockToggle.Parent = object
