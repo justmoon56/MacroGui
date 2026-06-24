@@ -15,33 +15,23 @@ local UserInputService = game:GetService("UserInputService")
 
 local function MakeDraggable(topbarobject, object, locked)
     local Dragging = false
-    local DragStart
-    local StartPosition
-    local ActiveInput = nil -- Mengunci referensi jari/mouse yang valid
+    local DragStart = nil
+    local StartPosition = nil
+    local ActiveInput = nil
 
     local PressStartTime = 0
     local HoldTime = 5.0
-    local HasLockedThisPress = false
+    local HasToggledThisPress = false
+    local MoveThreshold = 10 -- Tombol baru mau bergerak jika digeser lebih dari 10 pixel
 
     object:SetAttribute("Locked", locked or false)
 
-    -- Fungsi untuk mengecek area sentuhan tombol
+    -- Fungsi mengecek area tombol
     local function IsInBounds(inputPosition)
         local absPos = topbarobject.AbsolutePosition
         local absSize = topbarobject.AbsoluteSize
         return inputPosition.X >= absPos.X and inputPosition.X <= (absPos.X + absSize.X)
            and inputPosition.Y >= absPos.Y and inputPosition.Y <= (absPos.Y + absSize.Y)
-    end
-
-    local function Update(input)
-        if object:GetAttribute("Locked") then return end
-        local delta = input.Position - DragStart
-        object.Position = UDim2.new(
-            StartPosition.X.Scale,
-            StartPosition.X.Offset + delta.X,
-            StartPosition.Y.Scale,
-            StartPosition.Y.Offset + delta.Y
-        )
     end
 
     local function ToggleLock()
@@ -51,42 +41,47 @@ local function MakeDraggable(topbarobject, object, locked)
         if object.Name == "EmoteBtn" then _G.GuiLock["emote"] = newState end
         if object.Name == "CrouchBtn" then _G.GuiLock["crouch"] = newState end
 
+        -- Notifikasi Fluent UI sesuai permintaanmu
         if Fluent then
             Fluent:Notify({
                 Title = newState and "Button Locked" or "Button Unlocked",
-                Content = newState and "This button is now locked in place." or "This button can now be moved.",
-                Duration = 2
+                Content = newState and "Ditahan 5 detik: Tombol Berhasil Dikunci!" or "Ditahan 5 detik: Tombol Sekarang Bisa Digeser!",
+                Duration = 3
             })
         else
-            print(object.Name .. " Locked: " .. tostring(newState))
+            print(object.Name .. " Status Lock: " .. tostring(newState))
         end
     end
 
-    -- Deteksi sentuhan awal khusus pada area tombol
+    -- Input Dimulai
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
             return
         end
 
         if IsInBounds(input.Position) and not ActiveInput then
-            ActiveInput = input -- Ikat jari/mouse ini agar tidak terganggu jari lain
-            Dragging = not object:GetAttribute("Locked")
+            ActiveInput = input
             DragStart = input.Position
             StartPosition = object.Position
+            Dragging = false -- Belum di-drag sampai melewati threshold
             
             PressStartTime = tick()
-            HasLockedThisPress = false
+            HasToggledThisPress = false
 
-            -- Timer Hold 5 detik
+            -- Thread khusus menghitung durasi tahanan 5 detik
             task.spawn(function()
-                while PressStartTime > 0 do
-                    task.wait(0.05) -- Dipercepat dari 0.1 agar pengecekan lebih presisi
-                    if PressStartTime > 0 and (tick() - PressStartTime) >= HoldTime and not HasLockedThisPress then
-                        HasLockedThisPress = true
+                while ActiveInput == input and PressStartTime > 0 do
+                    task.wait(0.1)
+                    if PressStartTime > 0 and (tick() - PressStartTime) >= HoldTime and not HasToggledThisPress then
+                        HasToggledThisPress = true
+                        
+                        -- Jalankan fungsi Lock / Unlock
                         ToggleLock()
+                        
+                        -- Lepas paksa fungsi drag/seret saat itu juga
                         Dragging = false
-                        PressStartTime = 0
                         ActiveInput = nil
+                        PressStartTime = 0
                         break
                     end
                 end
@@ -94,27 +89,44 @@ local function MakeDraggable(topbarobject, object, locked)
         end
     end)
 
-    -- Pergerakan seret (Drag) yang aman dari gangguan jari lain
+    -- Pergerakan Input
     UserInputService.InputChanged:Connect(function(input)
-        if input == ActiveInput and Dragging then
-            -- Batalkan status hold untuk lock jika digeser lebih dari 15 pixel
-            if PressStartTime > 0 and (input.Position - DragStart).Magnitude > 15 then
-                PressStartTime = 0
+        if input == ActiveInput and DragStart and StartPosition then
+            -- Jika tombol sudah dikunci, jangan biarkan bergerak sama sekali
+            if object:GetAttribute("Locked") then 
+                Dragging = false
+                return 
             end
+
+            local delta = input.Position - DragStart
             
-            Update(input)
-            
-            if object.Name == "EmoteBtn" then _G.GuiPosition["emote"] = object.Position end
-            if object.Name == "CrouchBtn" then _G.GuiPosition["crouch"] = object.Position end
+            -- Jika pergerakan melampaui batas threshold, aktifkan mode drag dan matikan timer lock
+            if delta.Magnitude > MoveThreshold then
+                Dragging = true
+                PressStartTime = 0 -- Batalkan lock karena user berniat menggeser
+            end
+
+            if Dragging then
+                object.Position = UDim2.new(
+                    StartPosition.X.Scale,
+                    StartPosition.X.Offset + delta.X,
+                    StartPosition.Y.Scale,
+                    StartPosition.Y.Offset + delta.Y
+                )
+                if object.Name == "EmoteBtn" then _G.GuiPosition["emote"] = object.Position end
+                if object.Name == "CrouchBtn" then _G.GuiPosition["crouch"] = object.Position end
+            end
         end
     end)
 
-    -- Lepas ikatan input saat jari diangkat
+    -- Input Selesai
     UserInputService.InputEnded:Connect(function(input)
         if input == ActiveInput then
             Dragging = false
             PressStartTime = 0
             ActiveInput = nil
+            DragStart = nil
+            StartPosition = nil
         end
     end)
 end
@@ -162,7 +174,7 @@ local function SetupMacroClick(button, callback)
                 local dragDistance = (input.Position - dragStartPos).Magnitude
                 local holdDuration = tick() - startTime
 
-                -- Menghindari bentrok dengan hold-lock 5 detik
+                -- Macro klik normal hanya aktif jika ditekan kurang dari 4 detik
                 if holdDuration < 4.0 and dragDistance < 15 then
                     callback()
                 end
