@@ -9,19 +9,47 @@ local BtnSize = 80
 
 _G.GuiPosition = _G.GuiPosition or {}
 _G.GuiLock = _G.GuiLock or {}
--- Pastikan default lock di-load dengan benar (jika nil, set false)
-_G.GuiLock["emote"] = _G.GuiLock["emote"] or false
-_G.GuiLock["crouch"] = _G.GuiLock["crouch"] or false
 _G.EmoteNumber = _G.EmoteNumber or 1
 
 local UserInputService = game:GetService("UserInputService")
 
-local function MakeDraggable(topbarobject, object, lockToggleBtn)
+local function MakeDraggable(topbarobject, object, locked)
     local Dragging = false
+    local DragInput
     local DragStart
     local StartPosition
     local ActiveInput = nil
+
     local DragConnection = nil
+    object:SetAttribute("Locked", locked or false)
+
+    -- Membuat Tombol Gembok (Lock Toggle) Terpisah di Sebelah Kanan Tombol Macro
+    local lockToggle = Instance.new("ImageButton")
+    lockToggle.Name = "LockToggle"
+    lockToggle.Size = UDim2.new(0, 28, 0, 28)
+    lockToggle.Position = UDim2.new(1, 6, 0.5, -14) -- Posisinya di kanan persis
+    lockToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    lockToggle.Image = object:GetAttribute("Locked") and "rbxassetid://10723434711" or "rbxassetid://10747366027"
+    lockToggle.ScaleType = Enum.ScaleType.Fit
+    lockToggle.Visible = false -- Awalnya disembunyikan
+    lockToggle.Parent = object
+
+    -- Mengatur Sudut Membulat & Padding Gembok
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(1, 0)
+    toggleCorner.Parent = lockToggle
+
+    local togglePadding = Instance.new("UIPadding")
+    togglePadding.PaddingTop = UDim.new(0, 5)
+    togglePadding.PaddingBottom = UDim.new(0, 5)
+    togglePadding.PaddingLeft = UDim.new(0, 5)
+    togglePadding.PaddingRight = UDim.new(0, 5)
+    togglePadding.Parent = lockToggle
+
+    -- Timer State untuk Menyembunyikan Tombol Gembok
+    local holding = false
+    local holdStart = 0
+    local hideAt = 0
 
     local function IsInBounds(inputPosition)
         local absPos = topbarobject.AbsolutePosition
@@ -45,6 +73,7 @@ local function MakeDraggable(topbarobject, object, lockToggleBtn)
         DragConnection = UserInputService.InputChanged:Connect(function(input)
             if input == ActiveInput and Dragging then
                 Update(input)
+                hideAt = tick() -- Reset timer sembunyi gembok saat tombol digeser
                 if object.Name == "EmoteBtn" then _G.GuiPosition["emote"] = object.Position end
                 if object.Name == "CrouchBtn" then _G.GuiPosition["crouch"] = object.Position end
             end
@@ -58,39 +87,76 @@ local function MakeDraggable(topbarobject, object, lockToggleBtn)
         end
     end
 
-    -- Pantau status perubahan lock secara real-time
-    local function CheckLockState()
-        local isLocked = object:GetAttribute("Locked")
-        if isLocked then
+    -- Sistem Aksi Klik Gembok Lock/Unlock
+    lockToggle.MouseButton1Click:Connect(function()
+        hideAt = tick() -- Reset timer 6 detik setiap kali gembok diklik
+        local currentLock = not object:GetAttribute("Locked")
+        object:SetAttribute("Locked", currentLock)
+
+        if object.Name == "EmoteBtn" then _G.GuiLock["emote"] = currentLock end
+        if object.Name == "CrouchBtn" then _G.GuiLock["crouch"] = currentLock end
+
+        -- Perbarui Gambar Gembok (Locked / Unlocked)
+        lockToggle.Image = currentLock and "rbxassetid://10723434711" or "rbxassetid://10747366027"
+
+        if currentLock then
             DisconnectDragListener()
             Dragging = false
             ActiveInput = nil
-            lockToggleBtn.Image = "rbxassetid://10723434711" -- ID Gembok Terkunci
-        else
-            lockToggleBtn.Image = "rbxassetid://10747366027" -- ID Gembok Terbuka
         end
-    end
 
-    -- Daftarkan fungsi perubahan atribut agar gembok langsung merespon saat di-toggle
-    object:GetAttributeChangedSignal("Locked"):Connect(CheckLockState)
-    CheckLockState() -- Jalankan pengecekan awal saat UI dibuat
+        if Fluent then
+            Fluent:Notify({
+                Title = currentLock and "Button Locked" or "Button Unlocked",
+                Content = currentLock and "The button is locked in place." or "The button can now be slid freely.",
+                Duration = 2
+            })
+        end
+    end)
 
+    -- Pengecekan Loop untuk Menyembunyikan Gembok Otomatis Selama 6 Detik
+    task.spawn(function()
+        while task.wait(0.25) do
+            if lockToggle.Visible and (tick() - hideAt) >= 6 then
+                lockToggle.Visible = false
+            end
+        end
+    end)
+
+    -- Input Dimulai (Bisa untuk Geser atau Deteksi Hold Munculkan Gembok)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
             return
         end
 
-        if IsInBounds(input.Position) and not ActiveInput and not object:GetAttribute("Locked") then
+        if IsInBounds(input.Position) and not ActiveInput then
             ActiveInput = input
-            Dragging = true
             DragStart = input.Position
             StartPosition = object.Position
-            ConnectDragListener()
+            
+            holding = true
+            holdStart = tick()
+            hideAt = tick() -- Reset timer gembok saat disentuh
+
+            if not object:GetAttribute("Locked") then
+                Dragging = true
+                ConnectDragListener()
+            end
         end
     end)
 
+    -- Input Selesai (Mengecek jika ditahan 0.6 detik untuk memunculkan gembok)
     UserInputService.InputEnded:Connect(function(input)
         if input == ActiveInput then
+            if holding then
+                holding = false
+                -- Jika tombol ditahan setidaknya 0.6 detik sebelum dilepas, munculkan tombol gembok
+                if (tick() - holdStart) >= 0.6 then
+                    lockToggle.Visible = true
+                    hideAt = tick() -- Mulai hitung mundur 6 detik dari sekarang
+                end
+            end
+
             Dragging = false
             ActiveInput = nil
             DisconnectDragListener()
@@ -117,6 +183,7 @@ end
 
 local function SetupMacroClick(button, callback)
     local dragStartPos = nil
+    local startTime = 0
     local clickInput = nil
 
     UserInputService.InputBegan:Connect(function(input)
@@ -128,6 +195,7 @@ local function SetupMacroClick(button, callback)
                 if not clickInput then
                     clickInput = input
                     dragStartPos = input.Position
+                    startTime = tick()
                 end
             end
         end
@@ -137,8 +205,10 @@ local function SetupMacroClick(button, callback)
         if input == clickInput then
             if dragStartPos then
                 local dragDistance = (input.Position - dragStartPos).Magnitude
-                -- Klik macro hanya terpicu jika tombol tidak sedang digeser sejauh > 15 pixel
-                if dragDistance < 15 then
+                local holdDuration = tick() - startTime
+
+                -- Macro klik biasa hanya berjalan jika ditekan kurang dari 0.6 detik (tidak bentrok dengan menu gembok)
+                if holdDuration < 1 and dragDistance < 15 then
                     callback()
                 end
             end
@@ -162,9 +232,7 @@ local function createMacroUI()
         player.PlayerScripts.Events.KeybindUsed:Fire(a, b)
     end
 
-    -- ==========================================
-    -- EMOTE BUTTON SETUP
-    -- ==========================================
+    -- EMOTE BUTTON
     emoteGui = Instance.new("ScreenGui", guiPlayer)
     emoteGui.Name = "EmoteGui"
     emoteGui.ResetOnSpawn = false
@@ -172,11 +240,10 @@ local function createMacroUI()
     local emoteBtn = Instance.new("ImageButton", emoteGui)
     emoteBtn.Name = "EmoteBtn"
     emoteBtn.Size = UDim2.new(0, BtnSize, 0, BtnSize)
-    emoteBtn.Position = _G.GuiPosition["emote"] or UDim2.new(1, -140, 0.5, 0)
+    emoteBtn.Position = _G.GuiPosition["emote"] or UDim2.new(1, -100, 0.5, 0)
     emoteBtn.BackgroundTransparency = 1
     emoteBtn.Image = "rbxassetid://16803802267"
     emoteBtn.ImageTransparency = 1
-    emoteBtn:SetAttribute("Locked", _G.GuiLock["emote"])
 
     local emoteIcon = Instance.new("TextLabel", emoteBtn)
     emoteIcon.BackgroundTransparency = 1
@@ -187,45 +254,12 @@ local function createMacroUI()
     emoteIcon.Font = Enum.Font.GothamBold
     emoteIcon.TextColor3 = Color3.new(1, 1, 1)
 
-    -- Tombol Toggle Lock di Sebelah Kanan (Emote)
-    local emoteLockToggle = Instance.new("ImageButton", emoteBtn)
-    emoteLockToggle.Name = "LockToggle"
-    emoteLockToggle.Size = UDim2.new(0, 28, 0, 28)
-    emoteLockToggle.Position = UDim2.new(1, 6, 0.5, -14) -- Di kanan luar tombol utama
-    emoteLockToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    emoteLockToggle.BackgroundTransparency = 0.3
-    emoteLockToggle.ScaleType = Enum.ScaleType.Fit
+    MakeDraggable(emoteBtn, emoteBtn, _G.GuiLock["emote"] or false)
 
-    local emoteLockCorner = Instance.new("UICorner", emoteLockToggle)
-    emoteLockCorner.CornerRadius = UDim.new(1, 0)
-
-    local emoteLockPadding = Instance.new("UIPadding", emoteLockToggle)
-    emoteLockPadding.PaddingTop = UDim.new(0, 4)
-    emoteLockPadding.PaddingBottom = UDim.new(0, 4)
-    emoteLockPadding.PaddingLeft = UDim.new(0, 4)
-    emoteLockPadding.PaddingRight = UDim.new(0, 4)
-
-    MakeDraggable(emoteBtn, emoteBtn, emoteLockToggle)
-
-    emoteLockToggle.MouseButton1Click:Connect(function()
-        local currentLock = emoteBtn:GetAttribute("Locked")
-        local newLock = not currentLock
-        emoteBtn:SetAttribute("Locked", newLock)
-        _G.GuiLock["emote"] = newLock
-
-        if Fluent then
-            Fluent:Notify({
-                Title = newLock and "Emote Locked" or "Emote Unlocked",
-                Content = newLock and "Fungsi geser dimatikan." or "Tombol bisa digeser kembali.",
-                Duration = 2
-            })
-        end
-    end)
-
-    local lastEmote = 0
+    local last = 0
     SetupMacroClick(emoteBtn, function()
-        if tick() - lastEmote < 0.1 then return end
-        lastEmote = tick()
+        if tick() - last < 0.1 then return end
+        last = tick()
         task.spawn(function()
             pcall(function()
                 game.Workspace.Game.Players[player.Name].Equip:InvokeServer(2)
@@ -244,9 +278,7 @@ local function createMacroUI()
         end)
     end)
 
-    -- ==========================================
-    -- CROUCH BUTTON SETUP
-    -- ==========================================
+    -- CROUCH BUTTON
     crouchGui = Instance.new("ScreenGui", guiPlayer)
     crouchGui.Name = "CrouchGui"
     crouchGui.ResetOnSpawn = false
@@ -258,7 +290,6 @@ local function createMacroUI()
     crouchBtn.BackgroundTransparency = 1
     crouchBtn.Image = "rbxassetid://16803802267"
     crouchBtn.ImageTransparency = 1
-    crouchBtn:SetAttribute("Locked", _G.GuiLock["crouch"])
 
     local crouchIcon = Instance.new("ImageLabel", crouchBtn)
     crouchIcon.BackgroundTransparency = 1
@@ -267,40 +298,7 @@ local function createMacroUI()
     crouchIcon.Image = "rbxassetid://10238983204"
     crouchIcon.ImageTransparency = iconTransparency
 
-    -- Tombol Toggle Lock di Sebelah Kanan (Crouch)
-    local crouchLockToggle = Instance.new("ImageButton", crouchBtn)
-    crouchLockToggle.Name = "LockToggle"
-    crouchLockToggle.Size = UDim2.new(0, 28, 0, 28)
-    crouchLockToggle.Position = UDim2.new(1, 6, 0.5, -14) -- Di kanan luar tombol utama
-    crouchLockToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    crouchLockToggle.BackgroundTransparency = 0.3
-    crouchLockToggle.ScaleType = Enum.ScaleType.Fit
-
-    local crouchLockCorner = Instance.new("UICorner", crouchLockToggle)
-    crouchLockCorner.CornerRadius = UDim.new(1, 0)
-
-    local crouchLockPadding = Instance.new("UIPadding", crouchLockToggle)
-    crouchLockPadding.PaddingTop = UDim.new(0, 4)
-    crouchLockPadding.PaddingBottom = UDim.new(0, 4)
-    crouchLockPadding.PaddingLeft = UDim.new(0, 4)
-    crouchLockPadding.PaddingRight = UDim.new(0, 4)
-
-    MakeDraggable(crouchBtn, crouchBtn, crouchLockToggle)
-
-    crouchLockToggle.MouseButton1Click:Connect(function()
-        local currentLock = crouchBtn:GetAttribute("Locked")
-        local newLock = not currentLock
-        crouchBtn:SetAttribute("Locked", newLock)
-        _G.GuiLock["crouch"] = newLock
-
-        if Fluent then
-            Fluent:Notify({
-                Title = newLock and "Crouch Locked" or "Crouch Unlocked",
-                Content = newLock and "Fungsi geser dimatikan." or "Tombol bisa digeser kembali.",
-                Duration = 2
-            })
-        end
-    end)
+    MakeDraggable(crouchBtn, crouchBtn, _G.GuiLock["crouch"] or false)
 
     SetupMacroClick(crouchBtn, function()
         local char = player.Character
