@@ -23,18 +23,16 @@ local function MakeDraggable(topbarobject, object, locked)
     local DragConnection = nil
     object:SetAttribute("Locked", locked or false)
 
-    -- Membuat Tombol Gembok (Lock Toggle) Terpisah di Sebelah Kanan Tombol Macro
     local lockToggle = Instance.new("ImageButton")
     lockToggle.Name = "LockToggle"
     lockToggle.Size = UDim2.new(0, 28, 0, 28)
-    lockToggle.Position = UDim2.new(1, 6, 0.5, -14) -- Posisinya di kanan persis
+    lockToggle.Position = UDim2.new(1, 6, 0.5, -14)
     lockToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     lockToggle.Image = object:GetAttribute("Locked") and "rbxassetid://108197727138078" or "rbxassetid://72137584392157"
     lockToggle.ScaleType = Enum.ScaleType.Fit
-    lockToggle.Visible = false -- Awalnya disembunyikan
+    lockToggle.Visible = false
     lockToggle.Parent = object
 
-    -- Mengatur Sudut Membulat & Padding Gembok
     local toggleCorner = Instance.new("UICorner")
     toggleCorner.CornerRadius = UDim.new(1, 0)
     toggleCorner.Parent = lockToggle
@@ -46,13 +44,11 @@ local function MakeDraggable(topbarobject, object, locked)
     togglePadding.PaddingRight = UDim.new(0, 5)
     togglePadding.Parent = lockToggle
 
-    -- Timer State untuk Menyembunyikan Tombol Gembok
     local holding = false
     local holdStart = 0
     local hideAt = 0
 
     local function IsInBounds(inputPosition)
-        -- PERBAIKAN: Jika tombol tidak valid, tidak punya parent, atau tidak berada di bawah PlayerGui (State OFF), blokir drag
         if not topbarobject or not topbarobject.Parent or not topbarobject:IsDescendantOf(game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")) then 
             return false 
         end
@@ -84,7 +80,7 @@ local function MakeDraggable(topbarobject, object, locked)
         DragConnection = UserInputService.InputChanged:Connect(function(input)
             if input == ActiveInput and Dragging then
                 Update(input)
-                hideAt = tick() -- Reset timer sembunyi gembok saat tombol digeser
+                hideAt = tick()
                 if object.Name == "EmoteBtn" then _G.GuiPosition["emote"] = object.Position end
                 if object.Name == "CrouchBtn" then _G.GuiPosition["crouch"] = object.Position end
             end
@@ -98,16 +94,14 @@ local function MakeDraggable(topbarobject, object, locked)
         end
     end
 
-    -- Sistem Aksi Klik Gembok Lock/Unlock
     lockToggle.MouseButton1Click:Connect(function()
-        hideAt = tick() -- Reset timer 6 detik setiap kali gembok diklik
-        local currentLock = not object:GetAttribute("Locked")
+        hideAt = tick()
+            local currentLock = not object:GetAttribute("Locked")
         object:SetAttribute("Locked", currentLock)
 
         if object.Name == "EmoteBtn" then _G.GuiLock["emote"] = currentLock end
         if object.Name == "CrouchBtn" then _G.GuiLock["crouch"] = currentLock end
 
-        -- Perbarui Gambar Gembok (Locked / Unlocked)
         lockToggle.Image = currentLock and "rbxassetid://108197727138078" or "rbxassetid://72137584392157"
 
         if currentLock then
@@ -119,13 +113,12 @@ local function MakeDraggable(topbarobject, object, locked)
         if Fluent then
             Fluent:Notify({
                 Title = currentLock and "Button Locked" or "Button Unlocked",
-                Content = currentLock and "The button is locked in place." or "The button can now be slid freely.",
+                Content = currentLock and "The button is locked in place." or "The button can now be moved.",
                 Duration = 2
             })
         end
     end)
 
-    -- Pengecekan Loop untuk Menyembunyikan Gembok Otomatis Selama 6 Detik
     task.spawn(function()
         while task.wait(0.25) do
             if lockToggle.Visible and (tick() - hideAt) >= 6 then
@@ -134,7 +127,6 @@ local function MakeDraggable(topbarobject, object, locked)
         end
     end)
 
-    -- Input Dimulai (Bisa untuk Geser atau Deteksi Hold Munculkan Gembok)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
             return
@@ -147,7 +139,7 @@ local function MakeDraggable(topbarobject, object, locked)
             
             holding = true
             holdStart = tick()
-            hideAt = tick() -- Reset timer gembok saat disentuh
+            hideAt = tick()
 
             if not object:GetAttribute("Locked") then
                 Dragging = true
@@ -156,15 +148,13 @@ local function MakeDraggable(topbarobject, object, locked)
         end
     end)
 
-    -- Input Selesai (Mengecek jika ditahan 0.6 detik untuk memunculkan gembok)
     UserInputService.InputEnded:Connect(function(input)
         if input == ActiveInput then
             if holding then
                 holding = false
-                -- Jika tombol ditahan setidaknya 0.6 detik sebelum dilepas, munculkan tombol gembok
                 if (tick() - holdStart) >= 0.6 then
                     lockToggle.Visible = true
-                    hideAt = tick() -- Mulai hitung mundur 6 detik dari sekarang
+                    hideAt = tick()
                 end
             end
 
@@ -198,7 +188,6 @@ local function SetupMacroClick(button, callback)
     local clickInput = nil
 
     UserInputService.InputBegan:Connect(function(input)
-        -- PERBAIKAN UTAMA: Jika tombol dihapus atau tidak berada di bawah PlayerGui (State OFF), abaikan input sepenuhnya!
         if not button or not button.Parent or not button:IsDescendantOf(game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")) then 
             return 
         end
@@ -229,7 +218,6 @@ local function SetupMacroClick(button, callback)
                 local dragDistance = (input.Position - dragStartPos).Magnitude
                 local holdDuration = tick() - startTime
 
-                -- Jeda klik biasa di bawah 0.6 detik agar klop dengan deteksi gembok menu baru
                 if holdDuration < 0.6 and dragDistance < 15 then
                     callback()
                 end
@@ -254,7 +242,7 @@ local function createMacroUI()
         player.PlayerScripts.Events.KeybindUsed:Fire(a, b)
     end
 
-    -- EMOTE BUTTON
+    -- emoteGui
     emoteGui = Instance.new("ScreenGui", guiPlayer)
     emoteGui.Name = "EmoteGui"
     emoteGui.ResetOnSpawn = false
@@ -300,7 +288,7 @@ local function createMacroUI()
         end)
     end)
 
-    -- CROUCH BUTTON
+    -- CrouchGui
     crouchGui = Instance.new("ScreenGui", guiPlayer)
     crouchGui.Name = "CrouchGui"
     crouchGui.ResetOnSpawn = false
