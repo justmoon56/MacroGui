@@ -268,7 +268,7 @@ local function createMacroUI()
 
     local last = 0
     SetupMacroClick(emoteBtn, function()
-        if tick() - last < 0.1 then return end
+        if tick() - last < 0.3 then return end
         last = tick()
         task.spawn(function()
             pcall(function()
