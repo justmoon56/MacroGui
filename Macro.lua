@@ -268,7 +268,7 @@ local function createMacroUI()
 
     local last = 0
     SetupMacroClick(emoteBtn, function()
-        if tick() - last < 0.3 then return end
+        if tick() - last < 0.5 then return end
         last = tick()
         task.spawn(function()
             pcall(function()
@@ -280,6 +280,8 @@ local function createMacroUI()
                 ReplicatedStorage.Events.Emote:FireServer(tostring(_G.EmoteNumber))
             end)
         end)
+        game:GetService("Players").LocalPlayer.PlayerGui.HUD.Center.Emote.Visible = true
+        game:GetService("Players").LocalPlayer.PlayerGui.HUD.Center.Usables.Visible = true
         task.spawn(function()
             local char = player.Character
             if char then
