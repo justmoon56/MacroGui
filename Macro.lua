@@ -281,7 +281,6 @@ local function createMacroUI()
             end)
         end)
         game:GetService("Players").LocalPlayer.PlayerGui.HUD.Center.Emote.Visible = true
-        game:GetService("Players").LocalPlayer.PlayerGui.HUD.Center.Usables.Visible = true
         task.spawn(function()
             local char = player.Character
             if char then
@@ -289,6 +288,7 @@ local function createMacroUI()
             end
         end)
     end)
+    game:GetService("Players").LocalPlayer.PlayerGui.HUD.Center.Usables.Visible = true
 
     -- CrouchGui
     crouchGui = Instance.new("ScreenGui", guiPlayer)
